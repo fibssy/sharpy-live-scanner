@@ -4,6 +4,15 @@ on:
   schedule:
     - cron: "*/5 * * * *"
   workflow_dispatch:
+    inputs:
+      event_id:
+        description: "SofaScore event ID to test (leave empty for normal scan)"
+        required: false
+        default: ""
+      post_discord:
+        description: "Post alert to Discord? (true/false)"
+        required: false
+        default: "false"
 
 jobs:
   scan:
@@ -19,6 +28,7 @@ jobs:
         run: python -m pip install requests psycopg2-binary anthropic python-dotenv
 
       - name: Run scanner
+        if: ${{ !inputs.event_id }}
         env:
           DATABASE_URL:            ${{ secrets.DATABASE_URL }}
           DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
@@ -29,3 +39,13 @@ jobs:
           MIN_STRENGTH:            "MODERATE"
           MIN_MINUTE:              "60"
         run: python scanner.py
+
+      - name: Test specific match
+        if: ${{ inputs.event_id }}
+        env:
+          DATABASE_URL:            ${{ secrets.DATABASE_URL }}
+          DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID_LIVE: ${{ secrets.DISCORD_CHANNEL_ID_LIVE }}
+          ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          POST_DISCORD:            ${{ inputs.post_discord }}
+        run: python test_match.py ${{ inputs.event_id }}
