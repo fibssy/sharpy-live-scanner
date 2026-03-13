@@ -1,7 +1,7 @@
 """
 scanner.py — Main polling loop for sharpy-live-scanner
 
-Polls SofaScore every 60s for live matches in the 5 top European leagues.
+Polls API-Football every 60s for live matches in the 5 top European leagues.
 Runs the Poisson hazard model and fires Discord alerts via Claude Haiku
 when a strong market signal is detected.
 """
@@ -23,16 +23,13 @@ logging.basicConfig(
 )
 log = logging.getLogger("scanner")
 
-POLL_INTERVAL   = int(os.environ.get("POLL_INTERVAL_SECONDS", "60"))
-MIN_SCORE       = float(os.environ.get("MIN_SCORE", "6.5"))      # model score threshold (0-10)
-MIN_STRENGTH    = os.environ.get("MIN_STRENGTH", "MODERATE")      # WEAK / MODERATE / STRONG
-COOLDOWN        = int(os.environ.get("ALERT_COOLDOWN_MINUTES", "10"))
-
-STRENGTH_RANK = {"WEAK": 0, "MODERATE": 1, "STRONG": 2}
+POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL_SECONDS", "60"))
+MIN_PROB      = float(os.environ.get("MIN_PROB", "0.80"))   # 0.80 = 80% minimum signal probability
+COOLDOWN      = int(os.environ.get("ALERT_COOLDOWN_MINUTES", "10"))
 
 
 def should_alert(signal: dict) -> bool:
-    return STRENGTH_RANK.get(signal["strength"], 0) >= STRENGTH_RANK.get(MIN_STRENGTH, 1)
+    return signal["prob"] >= MIN_PROB
 
 
 def process_match(match: dict):

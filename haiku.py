@@ -35,7 +35,7 @@ P(goal in next {result['effective_window']} min): {round(result['prob']*100)}%""
     try:
         message = client.messages.create(
             model="claude-haiku-4-5",
-            max_tokens=120,
+            max_tokens=180,
             messages=[{"role": "user", "content": prompt}],
         )
         return message.content[0].text.strip()

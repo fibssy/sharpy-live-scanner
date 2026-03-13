@@ -12,11 +12,12 @@ DISCORD_API = "https://discord.com/api/v10"
 BOT_TOKEN   = os.environ.get("DISCORD_BOT_TOKEN", "")
 CHANNEL_ID  = os.environ.get("DISCORD_CHANNEL_ID_LIVE", "")
 
-STRENGTH_COLOUR = {
-    "STRONG":   0xef4444,  # red
-    "MODERATE": 0xf97316,  # orange
-    "WEAK":     0xeab308,  # yellow
-}
+def prob_colour(prob: float, has_xg: bool) -> int:
+    if not has_xg:
+        return 0xef4444  # red — no xG data, low confidence
+    if prob >= 0.90:
+        return 0x22c55e  # green
+    return 0xf97316      # orange (80–89%)
 
 LEAGUE_FLAG = {
     "Premier League": "🏴󠁧󠁢󠁥󠁮󠁧󠁿",
@@ -41,28 +42,27 @@ def post_alert(match: dict, result: dict, signal: dict, verdict: str):
         return
 
     flag     = _flag(match["league"])
-    colour   = STRENGTH_COLOUR.get(signal["strength"], 0x6b7280)
+    has_xg   = (match.get("home_xg", 0) + match.get("away_xg", 0)) > 0
+    colour   = prob_colour(signal["prob"], has_xg)
     score_str = f"{match['home_goals']}-{match['away_goals']}"
     minute   = match["minute"]
 
-    title   = f"{flag} {match['home']} vs {match['away']}"
-    desc    = f"**{match['league']}** · {minute}' · {score_str}"
+    prob_pct = round(signal["prob"] * 100)
+    title    = f"{flag} {match['home']} vs {match['away']}"
+    desc     = (
+        f"**{match['league']}** · {minute}' · {score_str}\n"
+        f"**{signal['market']}** · {prob_pct}% · odds {signal['implied_odds']} · "
+        f"{result['effective_window']} mins · score {result['score']}/10"
+    )
 
     fields = [
-        {"name": "Market",        "value": f"**{signal['market']}**",              "inline": True},
-        {"name": "Strength",      "value": signal["strength"],                     "inline": True},
-        {"name": "Model Prob",    "value": f"{round(signal['prob']*100)}%",         "inline": True},
-        {"name": "Implied Odds",  "value": f"{signal['implied_odds']}",             "inline": True},
-        {"name": "Score Rating",  "value": f"{result['score']}/10",                "inline": True},
-        {"name": "Window",        "value": f"{result['effective_window']} mins",   "inline": True},
-        {"name": "Signal Reason", "value": signal["reason"],                       "inline": False},
-        {"name": "AI Verdict",    "value": verdict or "—",                         "inline": False},
+        {"name": "Signal",     "value": signal["reason"],  "inline": False},
+        {"name": "AI Verdict", "value": verdict or "—",    "inline": False},
         {
-            "name": "Model Details",
+            "name":  "Model",
             "value": (
                 f"xG H/A: {match.get('home_xg',0):.2f}/{match.get('away_xg',0):.2f} · "
-                f"lambda H/A: {result['lambda_home']:.3f}/{result['lambda_away']:.3f} · "
-                f"P(goal): {round(result['prob']*100)}%"
+                f"λ H/A: {result['lambda_home']:.3f}/{result['lambda_away']:.3f}"
             ),
             "inline": False,
         },
@@ -73,7 +73,7 @@ def post_alert(match: dict, result: dict, signal: dict, verdict: str):
         "description": desc,
         "color":       colour,
         "fields":      fields,
-        "footer":      {"text": "Sharpy Live Scanner · Poisson V79"},
+        "footer":      {"text": "Sharpy Live Scanner · Poisson V80"},
     }
 
     try:

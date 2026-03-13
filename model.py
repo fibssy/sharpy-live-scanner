@@ -1,9 +1,15 @@
 """
-model.py — Poisson Hazard Model V79.0
-Ported from background.js (Flashscore WebScanner)
+model.py — Poisson Hazard Model V80.0
 
-Log-linear hazard model: log(lambda) = B0 + B1*xgPerMin + B2*boxShots + B3*bigChances + B4*touchesInBox + B5*gkSaves
-Team-split lambdaHome / lambdaAway unlocks BTTS, Next Goal, Asian Lines.
+Changes from V79:
+  ✅ Removed dead inputs: xgot, big_chances, touches_in_box (never available from API-Football)
+  ✅ Added shots_on_target — fetched by api_football.py, now used in model
+  ✅ Shot accuracy blend: shots_on_target/shots_in_box weights xG quality
+  ✅ shots_on_target rate replaces big_chances + touches_in_box in log-linear formula
+  ✅ Recalibrated coefficients for API-Football available features
+
+Log-linear hazard model:
+  log(λ) = β0 + β1*effectiveXgPerMin + β2*shotsOnTargetRate + β3*shotsInBoxRate + β4*gkSavesRate
 """
 
 import math
@@ -18,20 +24,27 @@ def factorial(n: int) -> int:
     return r
 
 
-def compute_team_lambda(xg, xgot, shots_in_box, touches_in_box, big_chances, gk_saves, goals, minute):
+def compute_team_lambda(xg, shots_on_target, shots_in_box, gk_saves, goals, minute):
     if minute < 5:
         return 0.001
 
-    effective_xg = (xgot * 0.65 + xg * 0.35) if xgot > 0 else xg
+    # Shot accuracy blend: weight xG by how many box shots are testing the keeper.
+    # High on-target ratio → shots are dangerous, xG is being realised as keeper pressure.
+    # Low ratio → lots of speculative/blocked shots, discount xG slightly.
+    if shots_on_target > 0 and shots_in_box > 0:
+        accuracy = min(shots_on_target / shots_in_box, 1.0)
+        effective_xg = xg * (0.40 + 0.60 * accuracy)
+    else:
+        effective_xg = xg
+
     xg_per_min = effective_xg / minute
 
     log_lambda = (
         -3.5
-        + 18.0 * xg_per_min
-        + 0.80 * (shots_in_box / minute)
-        + 0.15 * big_chances
-        + 0.40 * (touches_in_box / minute)
-        + 0.30 * (gk_saves / minute)
+        + 18.0 * xg_per_min                   # primary xG signal
+        + 3.50 * (shots_on_target / minute)    # on-target rate: replaces big_chances + touches_in_box
+        + 0.60 * (shots_in_box / minute)       # box volume (reduced weight — overlaps with shots_on_target)
+        + 0.20 * (gk_saves / minute)           # lagged keeper pressure signal
     )
 
     lam = math.exp(log_lambda)
@@ -140,9 +153,12 @@ def compute_market_signals(minute, score_diff, total_goals, home_goals, away_goa
 
 def calculate(d: dict) -> dict:
     """
-    d keys: minute, home_goals, away_goals, home_xg, away_xg, home_xgot, away_xgot,
-            home_shots_in_box, away_shots_in_box, home_touches_in_box, away_touches_in_box,
-            home_big_chances, away_big_chances, home_gk_saves, away_gk_saves, red_cards
+    d keys: minute, home_goals, away_goals,
+            home_xg, away_xg,
+            home_shots_on_target, away_shots_on_target,
+            home_shots_in_box, away_shots_in_box,
+            home_gk_saves, away_gk_saves,
+            red_cards
     """
     minute = d.get("minute", 0)
     if not minute or minute <= 0:
@@ -156,33 +172,31 @@ def calculate(d: dict) -> dict:
     remaining_minutes = max(95 - minute, 1)
     effective_window = min(15, remaining_minutes)
 
-    home_xg           = d.get("home_xg", 0)
-    away_xg           = d.get("away_xg", 0)
-    home_xgot         = d.get("home_xgot", 0)
-    away_xgot         = d.get("away_xgot", 0)
-    home_shots_in_box = d.get("home_shots_in_box", 0)
-    away_shots_in_box = d.get("away_shots_in_box", 0)
-    home_touches      = d.get("home_touches_in_box", 0)
-    away_touches      = d.get("away_touches_in_box", 0)
-    home_big_chances  = d.get("home_big_chances", 0)
-    away_big_chances  = d.get("away_big_chances", 0)
-    home_gk_saves     = d.get("home_gk_saves", 0)
-    away_gk_saves     = d.get("away_gk_saves", 0)
-    red_cards         = d.get("red_cards", 0)
+    home_xg              = d.get("home_xg", 0)
+    away_xg              = d.get("away_xg", 0)
+    home_shots_on_target = d.get("home_shots_on_target", 0)
+    away_shots_on_target = d.get("away_shots_on_target", 0)
+    home_shots_in_box    = d.get("home_shots_in_box", 0)
+    away_shots_in_box    = d.get("away_shots_in_box", 0)
+    home_gk_saves        = d.get("home_gk_saves", 0)
+    away_gk_saves        = d.get("away_gk_saves", 0)
+    red_cards            = d.get("red_cards", 0)
 
     lambda_home = compute_team_lambda(
-        xg=home_xg, xgot=home_xgot,
-        shots_in_box=home_shots_in_box, touches_in_box=home_touches,
-        big_chances=home_big_chances,
-        gk_saves=away_gk_saves,  # away keeper stops home attacks
-        goals=home_goals, minute=minute
+        xg=home_xg,
+        shots_on_target=home_shots_on_target,
+        shots_in_box=home_shots_in_box,
+        gk_saves=away_gk_saves,   # away keeper stops home attacks
+        goals=home_goals,
+        minute=minute,
     )
     lambda_away = compute_team_lambda(
-        xg=away_xg, xgot=away_xgot,
-        shots_in_box=away_shots_in_box, touches_in_box=away_touches,
-        big_chances=away_big_chances,
-        gk_saves=home_gk_saves,  # home keeper stops away attacks
-        goals=away_goals, minute=minute
+        xg=away_xg,
+        shots_on_target=away_shots_on_target,
+        shots_in_box=away_shots_in_box,
+        gk_saves=home_gk_saves,   # home keeper stops away attacks
+        goals=away_goals,
+        minute=minute,
     )
 
     # Time urgency multiplier
@@ -232,7 +246,7 @@ def calculate(d: dict) -> dict:
         prob_any_goal=prob_any_goal, prob_home_scores=prob_home_scores,
         prob_away_scores=prob_away_scores, prob_btts=prob_btts,
         lambda_total=lambda_total, lambda_home=lambda_home, lambda_away=lambda_away,
-        effective_window=effective_window, home_xg=home_xg, away_xg=away_xg
+        effective_window=effective_window, home_xg=home_xg, away_xg=away_xg,
     )
 
     return {
