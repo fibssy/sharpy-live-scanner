@@ -2,8 +2,8 @@ name: Live Scanner
 
 on:
   schedule:
-    - cron: "*/5 * * * *"   # every 5 minutes
-  workflow_dispatch:          # manual trigger for testing
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
 
 jobs:
   scan:
@@ -16,7 +16,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: python -m pip install anthropic psycopg2-binary requests python-dotenv
+        run: python -m pip install requests psycopg2-binary anthropic python-dotenv
 
       - name: Run scanner
         env:
@@ -27,5 +27,5 @@ jobs:
           RUN_ONCE:                "true"
           MIN_SCORE:               "6.5"
           MIN_STRENGTH:            "MODERATE"
-          ALERT_COOLDOWN_MINUTES:  "10"
+          MIN_MINUTE:              "60"
         run: python scanner.py
