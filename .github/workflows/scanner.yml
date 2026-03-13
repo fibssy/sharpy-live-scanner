@@ -1,0 +1,31 @@
+name: Live Scanner
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"   # every 5 minutes
+  workflow_dispatch:          # manual trigger for testing
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install anthropic psycopg2-binary requests python-dotenv
+
+      - name: Run scanner
+        env:
+          DATABASE_URL:            ${{ secrets.DATABASE_URL }}
+          DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
+          DISCORD_CHANNEL_ID_LIVE: ${{ secrets.DISCORD_CHANNEL_ID_LIVE }}
+          ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          RUN_ONCE:                "true"
+          MIN_SCORE:               "6.5"
+          MIN_STRENGTH:            "MODERATE"
+          ALERT_COOLDOWN_MINUTES:  "10"
+        run: python scanner.py

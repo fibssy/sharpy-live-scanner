@@ -69,24 +69,30 @@ def process_match(match: dict):
     db.save_alert(match["id"], full, result, top_signal, verdict)
 
 
+def poll_once():
+    try:
+        matches = sofascore.get_live_matches()
+        log.info("Scanning %d live matches", len(matches))
+        for match in matches:
+            try:
+                process_match(match)
+            except Exception as e:
+                log.error("Error processing %s vs %s: %s", match["home"], match["away"], e)
+    except Exception as e:
+        log.error("Poll error: %s", e)
+
+
 def run():
-    log.info("Sharpy Live Scanner started — poll every %ds, min score %.1f", POLL_INTERVAL, MIN_SCORE)
+    run_once = os.environ.get("RUN_ONCE", "false").lower() == "true"
 
-    while True:
-        try:
-            matches = sofascore.get_live_matches()
-            log.info("Scanning %d live matches", len(matches))
-
-            for match in matches:
-                try:
-                    process_match(match)
-                except Exception as e:
-                    log.error("Error processing %s vs %s: %s", match["home"], match["away"], e)
-
-        except Exception as e:
-            log.error("Poll error: %s", e)
-
-        time.sleep(POLL_INTERVAL)
+    if run_once:
+        log.info("Sharpy Live Scanner — single run mode")
+        poll_once()
+    else:
+        log.info("Sharpy Live Scanner started — poll every %ds, min score %.1f", POLL_INTERVAL, MIN_SCORE)
+        while True:
+            poll_once()
+            time.sleep(POLL_INTERVAL)
 
 
 if __name__ == "__main__":
