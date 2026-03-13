@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       event_id:
-        description: "SofaScore event ID to test (leave empty for normal scan)"
+        description: "API-Football fixture ID to test (leave empty for normal scan)"
         required: false
         default: ""
       post_discord:
@@ -34,6 +34,7 @@ jobs:
           DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_CHANNEL_ID_LIVE: ${{ secrets.DISCORD_CHANNEL_ID_LIVE }}
           ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          API_FOOTBALL_KEY:        ${{ secrets.API_FOOTBALL_KEY }}
           RUN_ONCE:                "true"
           MIN_SCORE:               "6.5"
           MIN_STRENGTH:            "MODERATE"
@@ -47,5 +48,6 @@ jobs:
           DISCORD_BOT_TOKEN:       ${{ secrets.DISCORD_BOT_TOKEN }}
           DISCORD_CHANNEL_ID_LIVE: ${{ secrets.DISCORD_CHANNEL_ID_LIVE }}
           ANTHROPIC_API_KEY:       ${{ secrets.ANTHROPIC_API_KEY }}
+          API_FOOTBALL_KEY:        ${{ secrets.API_FOOTBALL_KEY }}
           POST_DISCORD:            ${{ inputs.post_discord }}
         run: python test_match.py ${{ inputs.event_id }}

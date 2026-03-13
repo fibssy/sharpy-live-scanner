@@ -10,7 +10,7 @@ import logging
 import os
 import time
 
-import sofascore
+import api_football as sofascore
 import model
 import db
 import notifier
